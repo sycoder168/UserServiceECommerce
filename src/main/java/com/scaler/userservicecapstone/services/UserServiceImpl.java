@@ -19,19 +19,20 @@ import java.util.*;
 public class UserServiceImpl implements UserService {
 
 //    private static final SecretKey SECRET_KEY = Jwts.SIG.HS256.key().build();
-    private static final String SECRET_KEY_STRING = "my-super-secret-long-enough-key-for-jwt-token";
-    private static final SecretKey SECRET_KEY = Keys.hmacShaKeyFor(SECRET_KEY_STRING.getBytes(StandardCharsets.UTF_8) );
 
     private static final long EXPIRATION_TIME_IN_MS = 1000 * 60 * 60 * 10;
 
     private final UserRepository userRepository;
     private final TokenRepository tokenRepository;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
+    private final SecretKey secretKey;
 
-    public UserServiceImpl(UserRepository userRepository, TokenRepository tokenRepository, BCryptPasswordEncoder bCryptPasswordEncoder) {
+    public UserServiceImpl(UserRepository userRepository, TokenRepository tokenRepository, BCryptPasswordEncoder bCryptPasswordEncoder,
+                           SecretKey secretKey) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.bCryptPasswordEncoder = bCryptPasswordEncoder;
+        this.secretKey = secretKey;
     }
 
 
@@ -75,7 +76,7 @@ public class UserServiceImpl implements UserService {
                 .subject(user.getEmail())
                 .issuedAt(now)
                 .expiration(expiryDate)
-                .signWith(SECRET_KEY)
+                .signWith(secretKey)
                 .compact();
 
         Token token = new Token();
@@ -128,7 +129,7 @@ public class UserServiceImpl implements UserService {
 
         try {
             claims = Jwts.parser()
-                    .verifyWith(SECRET_KEY)
+                    .verifyWith(secretKey)
                     .build()
                     .parseSignedClaims(tokenValue)
                     .getPayload();

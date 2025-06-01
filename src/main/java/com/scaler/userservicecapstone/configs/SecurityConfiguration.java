@@ -10,16 +10,10 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .authorizeHttpRequests((requests) -> {
-                            try {
-                                requests
-                                        .anyRequest().permitAll()
-                                        .and().cors().disable()
-                                        .csrf().disable();
-                            } catch (Exception e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.disable())
+                .authorizeHttpRequests(auth -> auth
+                        .anyRequest().permitAll()
                 );
 
         return http.build();

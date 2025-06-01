@@ -5,6 +5,7 @@ import com.scaler.userservicecapstone.models.Token;
 import com.scaler.userservicecapstone.models.User;
 import com.scaler.userservicecapstone.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -37,8 +38,12 @@ public class UserController {
         } else return ResponseEntity.internalServerError().build();
     }
 
-    @GetMapping("/validate/{token}")
-    public ResponseEntity<Boolean> validateToken(@PathVariable("token") String token) {
+    @PostMapping("/validate")
+    public ResponseEntity<Boolean> validateToken(@RequestHeader(HttpHeaders.AUTHORIZATION) String token) {
+        if (token.startsWith("Bearer ")) {
+            token = token.replace("Bearer ", "");
+        }
+
         User user = userService.validateToken(token);
 
         return user == null ? new ResponseEntity<>(false, HttpStatus.UNAUTHORIZED) :
