@@ -4,17 +4,25 @@ import com.scaler.userservicecapstone.models.Token;
 import com.scaler.userservicecapstone.models.User;
 import com.scaler.userservicecapstone.repositories.TokenRepository;
 import com.scaler.userservicecapstone.repositories.UserRepository;
-import org.apache.commons.lang3.RandomStringUtils;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Optional;
-import java.util.Random;
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 @Service
 public class UserServiceImpl implements UserService {
+
+//    private static final SecretKey SECRET_KEY = Jwts.SIG.HS256.key().build();
+    private static final String SECRET_KEY_STRING = "my-super-secret-long-enough-key-for-jwt-token";
+    private static final SecretKey SECRET_KEY = Keys.hmacShaKeyFor(SECRET_KEY_STRING.getBytes(StandardCharsets.UTF_8) );
+
+    private static final long EXPIRATION_TIME_IN_MS = 1000 * 60 * 60 * 10;
 
     private final UserRepository userRepository;
     private final TokenRepository tokenRepository;
@@ -55,25 +63,43 @@ public class UserServiceImpl implements UserService {
             return null;
         }
 
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + EXPIRATION_TIME_IN_MS);
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId());
+        claims.put("email", user.getEmail());
+
+        String jsonString = Jwts.builder()
+                .claims(claims)
+                .subject(user.getEmail())
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(SECRET_KEY)
+                .compact();
+
         Token token = new Token();
         token.setUser(user);
-        token.setTokenValue(RandomStringUtils.random(
-                128,
-                48,
-                123,
-                true,
-                true,
-                null,
-                new Random()
-        ));
 
-        Calendar calendar = Calendar.getInstance();
-        calendar.add(Calendar.DATE, 30);
-        Date date = calendar.getTime();
+//        token.setTokenValue(RandomStringUtils.random(
+//                128,
+//                48,
+//                123,
+//                true,
+//                true,
+//                null,
+//                new Random()
+//        ));
 
-        token.setExpiryDate(date);
+        token.setTokenValue(jsonString);
 
-        return tokenRepository.save(token);
+//        Calendar calendar = Calendar.getInstance();
+//        calendar.add(Calendar.DATE, 30);
+//        Date date = calendar.getTime();
+
+        token.setExpiryDate(expiryDate);
+
+        return token;
 
     }
 
@@ -94,6 +120,43 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User validateToken(String tokenValue) {
+        if (tokenValue == null || tokenValue.isBlank()) {
+            return null;
+        }
+
+        Claims claims;
+
+        try {
+            claims = Jwts.parser()
+                    .verifyWith(SECRET_KEY)
+                    .build()
+                    .parseSignedClaims(tokenValue)
+                    .getPayload();
+        } catch (JwtException e) {
+            System.out.println("Token Validation failed. Invalid JWT token: " + e.getMessage());
+            return null;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Token Validation failed. Token value is null or empty or only whitespace: " + e.getMessage());
+            return null;
+        }
+
+        String email = claims.getSubject();
+        if (email == null || email.isBlank()) {
+            System.out.println("Token Validation failed. Email is null or blank");
+            return null;
+        }
+
+        Optional<User> userOptional = userRepository.findByEmail(email);
+        if (userOptional.isEmpty() || userOptional.get().isDeleted()) {
+            System.out.println("Token Validation failed. User not found or deleted");
+            return null;
+        }
+
+        return userOptional.get();
+    }
+
+
+    private User validateNonJwtTokenInDB(String tokenValue) {
         Optional<Token> tokenOptional = tokenRepository.findByTokenValueAndDeletedAndExpiryDateGreaterThan(tokenValue, false, new Date());
 
         if (tokenOptional.isEmpty()) {
